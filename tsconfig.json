@@ -1,0 +1,38 @@
+{
+  "compilerOptions": {
+    /* Language and Environment */
+    "target": "es2016", // Set ECMAScript target version
+    "module": "commonjs", // Specify module code generation
+    "jsx": "react", // If you're using React, specify this option
+    "esModuleInterop": true, // Enables emit interoperability between CommonJS and ES Modules
+    "forceConsistentCasingInFileNames": true, // Ensure consistent casing in file names
+    "skipLibCheck": true, // Skip type checking of declaration files
+    "strict": true, // Enable all strict type-checking options
+    "strictNullChecks": true, // Enable strict null checks
+    "noUnusedLocals": true, // Raise an error on unused local variables
+    "noUnusedParameters": true, // Raise an error on unused parameters
+    "noFallthroughCasesInSwitch": true, // Ensure switch statements have a default case
+
+    /* Emit */
+    "sourceMap": true, // Generate sourcemaps for debugging
+    "outDir": "./dist", // Specify the output folder for emitted files
+
+    /* Additional options */
+    "typeRoots": [
+      "./node_modules/@types", // Specify the locations of type definitions
+      "./types" // Optional: Add your custom types directory if needed
+    ],
+    "resolveJsonModule": true, // Allow importing .json files
+    "moduleResolution": "node", // Specify module resolution strategy
+    "types": ["jest", "node"], // Include Jest types (and Node if using Node.js)
+    "lib": ["DOM", "ES6"] // Specify library files to be included in the compilation
+  },
+  "include": [
+    "src/**/*", // Include all files in src directory
+    "tests/**/*" // Include all files in tests directory
+  ],
+  "exclude": [
+    "node_modules", // Exclude node_modules
+    "**/*.spec.ts" // Exclude specific test files, keep them if you want to run them
+  ]
+}
