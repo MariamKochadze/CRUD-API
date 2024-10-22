@@ -1,19 +1,38 @@
-import express, { Request, Response } from 'express';
-import httpProxy from 'http-proxy';
-import os from 'os';
+import http, { IncomingMessage, ServerResponse } from 'http';
+import { cpus } from 'os';
 import cluster from 'cluster';
 import { createUser, getAllUsers, getUserById, deleteUser } from './database';
 
-const app = express();
 const MASTER_PORT = Number(process.env.PORT) || 4000;
 const WORKER_PORT_START = MASTER_PORT + 1;
-const proxy = httpProxy.createProxyServer({});
+const numCPUs = cpus().length;
 const workerPorts: number[] = [];
 
-const numCPUs = os.cpus().length;
+
+const parseRequestBody = (req: IncomingMessage): Promise<any> => {
+    return new Promise((resolve, reject) => {
+        let body = '';
+        req.on('data', (chunk) => {
+            body += chunk.toString();
+        });
+        req.on('end', () => {
+            try {
+                resolve(JSON.parse(body));
+            } catch (error) {
+                reject(error);
+            }
+        });
+    });
+};
+
+
+const sendJSON = (res: ServerResponse, statusCode: number, data: any): void => {
+    res.writeHead(statusCode, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify(data));
+};
 
 if (cluster.isPrimary) {
-    // Fork workers
+ 
     for (let i = 0; i < numCPUs - 1; i++) {
         const workerPort = WORKER_PORT_START + i;
         workerPorts.push(workerPort);
@@ -22,7 +41,6 @@ if (cluster.isPrimary) {
 
     cluster.on('exit', (worker, code, signal) => {
         console.log(`Worker ${worker.process.pid} died with code ${code} and signal ${signal}`);
-        // Restart the worker
         const index = worker.id ? worker.id - 1 : 0;
         const newWorkerPort = workerPorts[index];
         if (newWorkerPort) {
@@ -30,55 +48,76 @@ if (cluster.isPrimary) {
         }
     });
 
-    // Load balancer logic to distribute requests
-    app.use('/api', (req: Request, res: Response) => {
+   
+    const loadBalancer = http.createServer((req: IncomingMessage, res: ServerResponse) => {
         const targetPort = workerPorts[Math.floor(Math.random() * workerPorts.length)];
-        proxy.web(req, res, { target: `http://localhost:${targetPort}` });
+        const proxy = http.request(
+            {
+                hostname: 'localhost',
+                port: targetPort,
+                path: req.url,
+                method: req.method,
+                headers: req.headers,
+            },
+            (proxyRes) => {
+                proxyRes.pipe(res);
+            }
+        );
+
+        req.pipe(proxy);
     });
 
-    app.listen(MASTER_PORT, () => {
+    loadBalancer.listen(MASTER_PORT, () => {
         console.log(`Load balancer running on port ${MASTER_PORT}`);
         console.log(`Workers running on ports ${workerPorts.join(', ')}`);
     });
 
 } else if (cluster.isWorker) {
-    // Worker process
+    
     const workerPort = Number(process.env.WORKER_PORT);
-    const workerApp = express();
+    const server = http.createServer(async (req: IncomingMessage, res: ServerResponse) => {
+        const { method, url } = req;
 
-    workerApp.use(express.json());
+        
+        if (url?.startsWith('/api/users') && method === 'POST') {
+            try {
+                const body = await parseRequestBody(req);
+                const { username, age, hobbies } = body;
+                const user = createUser(username, age, hobbies);
+                sendJSON(res, 201, user);
+            } catch (error) {
+                sendJSON(res, 400, { error: 'Invalid JSON input' });
+            }
 
-    // API routes
-    workerApp.post('/api/users', (req: Request, res: Response) => {
-        const { username, age, hobbies } = req.body;
-        const user = createUser(username, age, hobbies);
-        res.status(201).json(user);
-    });
+        } else if (url === '/api/users' && method === 'GET') {
+            const users = getAllUsers();
+            sendJSON(res, 200, users);
 
-    workerApp.get('/api/users', (_req: Request, res: Response) => {
-        const users = getAllUsers();
-        res.json(users);
-    });
+        } else if (url?.startsWith('/api/users/') && method === 'GET') {
+            const userId = url.split('/')[3];
+            const user = getUserById(userId);
+            if (user) {
+                sendJSON(res, 200, user);
+            } else {
+                sendJSON(res, 404, { error: 'User not found' });
+            }
 
-    workerApp.get('/api/users/:id', (req: Request, res: Response) => {
-        const user = getUserById(req.params.id);
-        if (user) {
-            res.json(user);
+        } else if (url?.startsWith('/api/users/') && method === 'DELETE') {
+            const userId = url.split('/')[3];
+            const success = deleteUser(userId);
+            if (success) {
+                res.writeHead(204);
+                res.end();
+            } else {
+                sendJSON(res, 404, { error: 'User not found' });
+            }
+
         } else {
-            res.status(404).json({ error: 'User not found' });
+            sendJSON(res, 404, { error: 'Route not found' });
         }
     });
 
-    workerApp.delete('/api/users/:id', (req: Request, res: Response) => {
-        const success = deleteUser(req.params.id);
-        if (success) {
-            res.status(204).send();
-        } else {
-            res.status(404).json({ error: 'User not found' });
-        }
-    });
-
-    workerApp.listen(workerPort, () => {
+    server.listen(workerPort, () => {
         console.log(`Worker ${process.pid} running on port ${workerPort}`);
     });
 }

@@ -27,7 +27,6 @@
     "uuid": "^10.0.0"
   },
   "devDependencies": {
-    "@types/express": "^5.0.0",
     "@types/http-proxy": "^1.17.15",
     "@types/jest": "^29.5.13",
     "@types/node": "^22.7.7",

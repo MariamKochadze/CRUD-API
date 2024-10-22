@@ -17,7 +17,7 @@ export const initializeDatabase = (withUsers: boolean = true) => {
             { id: uuidv4(), username: "Bob Johnson", age: 35, hobbies: ["hiking", "cooking"] }
         ];
     } else {
-        users = []; // Initialize with an empty array for tests
+        users = []; 
     }
 };
 
@@ -35,17 +35,17 @@ export const updateUser = (id: string, username: string, age: number, hobbies: s
     const index = users.findIndex(user => user.id === id);
     if (index !== -1) {
         const updatedUser: User = { id, username, age, hobbies };
-        users[index] = updatedUser; // Update the user in the array
+        users[index] = updatedUser; 
         return updatedUser;
     }
-    return null; // User not found
+    return null;
 };
 
 export const deleteUser = (id: string) => {
     const index = users.findIndex(user => user.id === id);
     if (index !== -1) {
-        users.splice(index, 1); // Remove user from the array
-        return true; // Successfully deleted
+        users.splice(index, 1); 
+        return true; 
     }
-    return false; // User not found
+    return false; 
 };

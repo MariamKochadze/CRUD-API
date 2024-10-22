@@ -1,17 +1,16 @@
-import express from 'express';
-import { config } from 'dotenv';
-import userRoutes from './routes/routes';
+import http, { IncomingMessage, ServerResponse } from 'http';
+import { handleRequest } from './routes/routes';
 
-config(); // Load environment variables
 
-const app = express();
-const port = process.env.PORT || 4000;
+const PORT: number = parseInt(process.env.PORT || '4000', 10);
 
-app.use(express.json()); // for parsing application/json
 
-// Use the user routes
-app.use('/api/users', userRoutes);
+const server = http.createServer((req: IncomingMessage, res: ServerResponse) => {
+    handleRequest(req, res);
 
-app.listen(port, () => {
-  console.log(`Server running on port ${port}`);
+});
+
+
+server.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
 });

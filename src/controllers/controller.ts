@@ -1,108 +1,130 @@
-import { Request, Response, NextFunction } from 'express';
-import { validate as uuidValidate } from 'uuid';
-import {
-    getAllUsers,
-    getUserById,
-    createUser,
-    updateUser,
-    deleteUser,
-} from '../database';
+import { IncomingMessage, ServerResponse } from 'http';
+import { getAllUsers, getUserById, createUser, updateUser, deleteUser } from '../database';
 
-export const getAllUsersController = (_: Request, res: Response, next: NextFunction): void => {
-    try {
-        const users = getAllUsers();
-        res.status(200).json(users);
-    } catch (error) {
-        next(error);
-    }
+
+interface User {
+    id: string;
+    username: string;
+    age: number;
+    hobbies: string[];
+}
+
+
+const parseRequestBody = (req: IncomingMessage, callback: (data: Partial<User>) => void): void => {
+    let body = '';
+    req.on('data', (chunk) => {
+        body += chunk.toString();
+    });
+    req.on('end', () => {
+        try {
+            callback(JSON.parse(body || '{}'));
+        } catch (error) {
+            callback({});
+        }
+    });
 };
 
-export const getUserByIdController = (req: Request, res: Response, next: NextFunction): void => {
-    try {
-        const { userId } = req.params;
-
-        if (!uuidValidate(userId)) {
-            res.status(400).json({ message: 'Invalid user ID' });
-            return;
-        }
-
-        const user = getUserById(userId);
-        if (!user) {
-            res.status(404).json({ message: 'User not found' });
-            return;
-        }
-
-        res.status(200).json(user);
-    } catch (error) {
-        next(error);
-    }
+const isValidUUID = (id: string): boolean => {
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    return uuidRegex.test(id);
 };
 
-export const createUserController = (req: Request, res: Response, next: NextFunction): void => {
-    try {
-      const { name, username, age, hobbies } = req.body;
-      
-      // Use name if username is not provided
-      const finalUsername = username || name;
-  
-      if (!finalUsername || typeof age !== 'number') {
-        res.status(400).json({ message: 'Invalid input: username/name and age are required' });
+const getAllUsersController = (_req: IncomingMessage, res: ServerResponse): void => {
+    const users: User[] = getAllUsers();
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify(users));
+};
+
+
+const getUserByIdController = (_req: IncomingMessage, res: ServerResponse, userId: string): void => {
+    if (!isValidUUID(userId)) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ message: 'Invalid user ID format' }));
         return;
-      }
-  
-      // If hobbies is not provided, use an empty array
-      const finalHobbies = Array.isArray(hobbies) ? hobbies : [];
-  
-      const newUser = createUser(finalUsername, age, finalHobbies);
-      res.status(201).json(newUser);
-    } catch (error) {
-      next(error);
     }
-  };
-
-export const updateUserController = (req: Request, res: Response, next: NextFunction): void => {
-    try {
-        const { userId } = req.params;
-
-        if (!uuidValidate(userId)) {
-            res.status(400).json({ message: 'Invalid user ID' });
-            return;
-        }
-
-        const { username, age, hobbies } = req.body;
-
-        if (!username || typeof age !== 'number' || !Array.isArray(hobbies)) {
-            res.status(400).json({ message: 'Invalid input' });
-            return;
-        }
-
-        const updatedUser = updateUser(userId, username, age, hobbies);
-        if (!updatedUser) {
-            res.status(404).json({ message: 'User not found' });
-        } else {
-            res.status(200).json(updatedUser);
-        }
-    } catch (error) {
-        next(error);
+    const user: User | undefined = getUserById(userId);
+    if (user) {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(user));
+    } else {
+        res.writeHead(404, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ message: 'User not found' }));
     }
 };
 
-export const deleteUserController = (req: Request, res: Response, next: NextFunction): void => {
-    try {
-        const { userId } = req.params;
 
-        if (!uuidValidate(userId)) {
-            res.status(400).json({ message: 'Invalid user ID' });
+const createUserController = (req: IncomingMessage, res: ServerResponse): void => {
+    parseRequestBody(req, (data: Partial<User>) => {
+        const { username, age, hobbies } = data;
+
+        if (!username) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ message: 'Username is required' }));
             return;
         }
 
-        const deleted = deleteUser(userId);
-        if (!deleted) {
-            res.status(404).json({ message: 'User not found' });
-        } else {
-            res.status(204).send();
-        }
-    } catch (error) {
-        next(error);
+        const newUser: User = createUser(username, age ?? 0, hobbies || []);
+        res.writeHead(201, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(newUser));
+    });
+};
+
+const updateUserController = (req: IncomingMessage, res: ServerResponse, userId: string): void => {
+  
+    if (!isValidUUID(userId)) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ message: 'Invalid user ID format' }));
+        return;
     }
+
+   
+    parseRequestBody(req, (data: Partial<User>) => {
+        const { username, age, hobbies } = data;
+
+       
+        if (username === undefined || age === undefined || !Array.isArray(hobbies)) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ message: 'Invalid input' }));
+            return;
+        }
+
+       
+        const updatedUser: User | null = updateUser(userId, username, age, hobbies);
+        if (!updatedUser) {
+            res.writeHead(404, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ message: 'User not found' }));
+        } else {
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify(updatedUser));
+        }
+    });
+};
+
+
+
+const deleteUserController = (_req: IncomingMessage, res: ServerResponse, userId: string): void => {
+    
+    if (!isValidUUID(userId)) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ message: 'Invalid user ID format' }));
+        return;
+    }
+
+    
+    const deleted: boolean = deleteUser(userId);
+    if (!deleted) {
+        res.writeHead(404, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ message: 'User not found' }));
+    } else {
+        res.writeHead(204); 
+        res.end();
+    }
+};
+
+export {
+    getAllUsersController,
+    getUserByIdController,
+    createUserController,
+    updateUserController,
+    deleteUserController
 };
